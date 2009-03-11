@@ -1,0 +1,264 @@
+IMAP Module for NaviServer 4.x
+Release 3.2.3
+vlad@crystalballinc.com
+
+This is NaviServer module that implements IMAP4 interface.
+It is based on UW IMAP c-client library from http://www.washington.edu/imap/. 
+It allows to use NaviServer as IMAP client and build Web based IMAP applications.
+
+/*--------------------------------------------------------------------*/
+
+Compiling and Installing
+
+To compile this driver, you'll need to have c-client library compiled 
+and installed. NaviSrver can be installed or source distribution may be used.
+There is variable IMAP in Makefile which points to installation/dustribution
+directory.
+
+Configuring
+
+Here is an nsd.tcl excerpt for configuring the IMAP module:
+
+ns_section      ns/server/${server}/module/nsimap
+ns_param	idle_timeout	1800
+ns_param	debug		0
+#ns_param	mailbox		""
+#ns_param	user		""
+#ns_param	password	""
+
+Timeout is in seconds, it defines inactivity period after which
+sessions will be closed. mailbox, user and password may be specified
+as default values for all sessions.
+
+Usage
+
+    ns_imap usage:
+ 
+      ns_imap sessions
+        returns list with cusrrently opened sessions as
+           { id opentime accesstime mailbox } ...
+ 
+      ns_imap gc
+        performs garbage collection, closes inactive sessions according to
+        config parameter timeout from config section ns/server/${server}/module/nsimap
+ 
+      ns_imap encode type data
+      ns_imap decode type data
+        performs encodeing/decoding given text according given format.
+        type may be one of the following: base64 qprint
+
+      ns_imap striphtml text ?tags?
+        strips dangerous HTML tags from the given HTML text, 
+        by default it removes body/title/div/object/frame tags.
+        If tags are specified it will use them instead of internal list.
+ 
+      ns_imap open -mailbox mailbox ?-user u -password p -debug -expunge -anonymous -shortcache -readonly -halfopen -reopen?
+        creates new mail session for specified mailbox. Optional parameters
+        can be specified. Returns mail descriptor which should be used in subsequent
+        calls. In order to preserve {} in the IMAP mailbox name the whole
+        mailbox should be inside {} also.
+        Example:
+             ns_imap open -mailbox {{localhost/ssl}mail/INBOX} -user vlad -password test -expunge
+ 
+      ns_imap close #s
+        closes specified mail session
+ 
+      ns_imap reopen #s ?args?
+        reuse existing session to open another mailbox, optional args are the same
+        as in open command
+ 
+     ns_imap status #s ?flags?
+       returns Tcl list with mailbox status
+       valid flags
+       OPENTIME - Time mailbox was opened (in seconds from epoch)
+       LASTACCESS - Last time mailbox was accessed (in seconds from epoch)
+       USERFLAGS - User flags
+       MESSAGES - Number of messages in mailbox
+       RECENT - number of recent messages in mailbox
+       UNSEEN - number of unseen messages in the mailbox
+       UIDNEXT - Next UID value to be assigned
+       UIDVALIDITY - UID validity value
+       Default (no flags given) will return all values
+       Example: ns_imap status 1 UNSEEN will return
+                {Unseen 18}
+ 
+      ns_imap error #s
+      ns_imap expunge #s
+
+      ns_imap append #s mailbox text
+        appends given mail message into specified mailbox
+ 
+      ns_imap copy #s sequence mailbox
+        copy message(s) specified by sequence in the form n,n:m into specified mailbox
+ 
+      ns_imap move #s
+        moves message(s) specified by sequence in the form n,n:m into specified mailbox
+ 
+      ns_imap ping #s
+        returns 1 if there is new mail
+ 
+      ns_imap check #s
+        performs internal mailbox checking
+ 
+      ns_imap headers #s msgno ?-array name?
+      ns_imap header #s msgno hdrname
+        fetches the complete, unfiltered RFC 822 format header of the specified
+        message as a text string and returns it as a Tcl list in the form
+        { name value name value ... } suitable for using array set command.
+        if array name is specified result will be placed into array variable
+        Example:
+             oss2:nscp 3> ns_imap headers 1 1
+             Date {Wed, 19 Jan 2000 19:24:39 -0500 (EST)}
+             Subject {Re: 1.gif}
+             In-Reply-To <200001171954.OAA15399@host>
+             Message-Id <Pine.LNX.4.10.10001191922480.2765>
+             To {John Doe <jdoe@localhost>}
+             From {Bill Gates <bgates@ms.com>}
+
+      ns_imap header #s msgno hdrname
+        fetches specific header from the given message
+ 
+      ns_imap text #s msgno ?-flags flags?
+        fetches the non-header text of the
+        specified message as a text string and returns that text string.  No
+        attempt is made to segregate individual body parts.
+        flags may contain one or more options separated by comma:
+           UID - msg number if UID
+           PEEK - do not set the \Seen flag if it not already set
+           INTERNAL - The return string is in "internal" format,
+         	      without any attempt to canonicalize to CRLF
+         	      newlines
+ 
+      ns_imap body #s msgno part ?-flags flags? ?-decode? ?-file name?
+        fetches the particular section of the
+        body of the specified message as a text string and returns that text
+        string.  The section specification is a string of integers delimited by
+        period which index into a body part list as per the IMAP4
+        specification.  Body parts are not decoded by this function.
+        Flags are the same as in ns_imap text command.
+        if -decode is specified, body text will be decoded according to
+        content encoding which is base64 or qprint.
+        if -file is specified, body contents will be save to the given file
+        instead of returning it.
+        if -return is specified returns body contents into current HTTP connection stream,
+        performs necessary base64/qprint decoding. Something similar
+        to ns_return.
+ 
+      ns_imap struct #s msgno ?-flags flags? ?-array name?
+      ns_imap bodystruct #s msgno part ?-flags flags? ?-array name?
+        fetches all the structured information
+        (envelope, internal date, RFC 822 size, flags, and body structure) for
+        the given msgno and returns it as a Tcl list in the form { name value name value ... }
+        suitable for using array set command. ns_imap bodystruct fetches just one particular
+        message body part.
+        if array name is specified result will be placed into array variable
+        Example:
+             host:nscp 5> ns_imap struct 1 26
+             type multipart encoding 7bit subtype MIXED
+             body.BOUNDARY ----_=_NextPart_000_01BFD481.52B63550
+             part1 {type text encoding 7bit subtype PLAIN
+                    id <Pine.LNX.4.10.10006271849542.1820@thread.crystalballinc.com>
+                    lines 17 bytes 458 body.CHARSET US-ASCII}
+ 
+      ns_imap m_create #s mailbox
+        creates new mailbox
+ 
+      ns_imap m_delete #s mailbox
+        deletes existing mailbox
+ 
+      ns_imap m_rename #s mailbox newname
+        renames existing mailbox
+ 
+      ns_imap delete #s sequence ?flags?
+      ns_imap undelete #s sequence ?flags?
+        marks/unmarks specifies message(s) as deleted
+        flags may be one or more
+            UID		The sequence argument contains UIDs instead of
+         		 sequence numbers
+            SILENT	Do not update the local cache with the new
+         		 value of the flags
+ 
+      ns_imap setflags #s sequence flag ?flags?
+      ns_imap clearflags #s sequence flag ?flags?
+        adds/clears the specified flag to the flags set for the messages in
+        the specified sequence.
+ 
+      ns_imap list #s
+      ns_imap lsub #s
+        returns a list of mailboxes using reference and pattern.
+        "*" is a wildcard which matches zero or more
+        characters; "%" is a variant which does not descend a hierarchy level.
+        Resulting Tcl list consists from pairs { mailbox attributes .... }
+        ns_imap lsub returns only subscribed mailboxes.
+        Example:
+             oss2:nscp 4> ns_imap list 1 {{localhost}} mail/*
+             mail/ noselect mail/text {noinferiors unmarked}
+             mail/private {noinferiors unmarked} mail/trash {noinferiors unmarked}
+ 
+      ns_imap search #s searchCriteria
+        performs mailbox search and returns found message ids. Supports
+        IMAP2 search criteria only.
+        Example:
+             ns_imap search 1 "FROM john"
+             ns_imap search 1 "SUBJECT Meeting"
+ 
+      ns_imap subscribe #s mailbox
+      ns_imap unsusbscribe #s mailbox
+        adds/removes the given name to/from the subscription list
+ 
+      ns_imap n_msgs #s
+        returns number of message sin the mailbox
+ 
+      ns_imap n_recent #s
+        returns number of recent messages in the mailbox
+ 
+      ns_imap sort #s criteria reverse ?flags?
+        returns Tcl list with message numbers according to the given
+        sort criteria header which can be one of the following:
+          date arrival from subject to cc size
+        reverse may be 0 or 1
+        flags may include:
+          UID		Return UIDs instead of sequence numbers
+          NOPREFETCH	Don't prefetch searched messages.
+ 
+      ns_imap uid #s msgno
+        returns UID for specified message number
+
+      ns_imap setparam #s name value
+        stores named value into mail session runtime parameters list,
+        can be used for keeping session specific information along with
+        the session, like cookie sesion id
+
+        Special names:
+          session.atclose stores Tcl code/proc to be executed at
+                          session close.
+ 
+      ns_imap getparam #s name
+        returns session's value for the given parameter name
+  
+        Special names:
+          mailbox - returns canonical mailbox name
+          mailbox.name - returns just mailbox file name
+          mailbox.host - returns remote host and options without mailbox name
+          user - returns name of the logged in user
+          authuser - returns authentication user name
+          host - returns mail host name
+          password - user session password
+
+      ns_imap parsedate datestring
+        parses date/time string and returns seconds since epoch if date is
+        correct or empty string if not
+
+      ns_imap getquota #s root
+        returns current quota value
+       
+      ns_imap setquota #s root size ...
+        sets new storage quota
+ 
+      ns_imap setacl #s mailbox user value
+        sets acl for the given mailbox and user
+
+Authors
+
+     Vlad Seryakov vlad@crystalballinc.com
+

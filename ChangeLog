@@ -1,0 +1,124 @@
+2007-03-07 Vlad Seryakov  vlad@crystalballinc.com
+
+	* silence compiler warnigns
+
+2006-08-24 Vlad Seryakov  vlad@crystalballinc.com
+
+	* code updates and cleanups
+
+2006-06-24 Vlad Seryakov  vlad@crystalballinc.com
+
+	* silence compiler warnings
+	* check for session tls in the callbacks
+
+2005-08-01 Vlad Seryakov  vlad@crystalballinc.com
+
+	* removed old compat functions
+
+2004-02-19 Vlad Seryakov  vlad@crystalballinc.com
+
+        * UID support added to all commands, thanks to Neophytos Demetriou
+
+2004-08-17 Neophytos Demetriou <k2pts@cytanet.com.cy>
+
+        * Internal date added to message struct
+
+2004-02-11 Vlad Seryakov  vlad@crystalballinc.com
+
+        * Signed/unsigned integer index corrcted
+
+2003-06-06 Vlad Seryakov  vlad@crystalballinc.com
+
+        * Stream close crash fixed, some minor changes
+
+2003-05-19 Vlad Seryakov  vlad@crystalballinc.com
+
+        * File return fixes in ns_imap body command
+
+2003-05-08 Scott Goodwin  <scott@scottg.net>
+
+        * Initial import into AOLserver SourceForge.
+
+2003-04-28 Mat Kovach mkovach@alal.com
+
+        * Modified ns_imap status to return Last Access, Open Time,
+          Messages, Recent, Unseen, Uidnext, Uidvalidity and
+          allow ns_imap to be controlled by flags
+
+2003-04-20 Vlad Seryakov vlad@crystalballinc.com
+
+        * Aolserver 4 support.
+
+2003-03-09 Jamie Rasmussen jamie@mle.media.mit.edu
+
+	* Logical |= should have been used instead of !=
+	* Added Win32 compilation support
+
+2003-02-06 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixed a bug with infinite loop during fatal error
+
+2002-12-08 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixed a bug in memory allocation/freeing
+
+2002-10-03 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixed a bug in garbage collection function
+
+2002-09-29 Vlad Seryakov vlad@crystalballinc.com
+
+	* Renamed ns_mail into ns_imap
+
+2002-07-05 Vlad Seryakov vlad@crystalballinc.com
+
+        * Mime types handling for multipart messages, uses
+          Aolserver mime types
+
+2002-06-09 Vlad Seryakov vlad@crystalballinc.com
+
+        * Bug fixes in quota and acl commands
+
+2002-06-06 Vlad Seryakov vlad@crystalballinc.com
+
+        * Added quota and ACL commands
+
+2002-06-05 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixes in README, thanks to Denis Roy (droy@sussdorff-roy.com)
+
+2002-04-03 Vlad Seryakov vlad@crystalballinc.com
+
+	* Replaced session.atclose handler code using the same
+          Tcl interpeter as connection.
+
+2002-06-02 Vlad Seryakov vlad@crystalballinc.com
+
+	* Small bugfixes with atclose handler, rewritten headers command
+
+2002-01-02 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixed bug in garbage collection, other small bugfixes
+
+2002-01-01 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixed bug encode/decode using ByteArray instead of string
+
+2001-12-30 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixed bug with wrong message id
+
+2001-12-26 Vlad Seryakov vlad@crystalballinc.com
+
+	* Many bugfixes and added strip command and
+          -array support for struct commands
+
+2001-12-24 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixed bug in session allocation/deallocation
+
+2001-12-21 Vlad Seryakov vlad@crystalballinc.com
+
+	* Fixed error handling and session expiration
+	* added parsedate, getparam, setparam commands
+
