@@ -282,15 +282,13 @@
 #include "fs.h"
 #include <setjmp.h>
 
-//NS_RCSID("@(#) $Header: /cvsroot/naviserver/modules/nsimap/nsimap.c,v 1.16 2008/03/26 20:18:04 seryakov Exp $");
-
 #define _VERSION  "3.4"
 
 typedef struct _mailSession {
     struct _mailSession *next, *prev;
     unsigned long id;
-    unsigned long open_time;
-    unsigned long access_time;
+    time_t open_time;
+    time_t access_time;
     char *mailbox;
     char *user;
     char *passwd;
@@ -299,17 +297,17 @@ typedef struct _mailSession {
     Tcl_Obj *list;
     Ns_Set *params;
     Ns_Set *headers;
-    long uid;
+    unsigned long uid;
     MAILSTREAM *stream;
     jmp_buf jmp;
     void *server;
 } mailSession;
 
 typedef struct {
-    char *server;
-    char *mailbox;
-    char *user;
-    char *passwd;
+    const char *server;
+    const char *mailbox;
+    const char *user;
+    const char *passwd;
     int debug;
     int idle_timeout;
     int gc_interval;
@@ -319,16 +317,18 @@ typedef struct {
 } mailServer;
 
 static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONST objv[]);
-static int MailInterpInit(Tcl_Interp * interp, void *context);
 static char *utf7_decode(char *in, int inlen, int *outlen);
 static char *utf7_encode(char *in, int inlen, int *outlen);
-static char *strStripHtml(char *str, char *tags[]);
+static char *strStripHtml(char *str, const char *tags[]);
 static char *strLower(char *str);
 static void mailGc(void *arg);
 static void mm_parseline(ENVELOPE * env, char *hdr, char *data, char *host);
 static void mm_getquota(MAILSTREAM * stream, char *qroot, QUOTALIST * qlist);
 
 static Ns_Tls mailTls;
+static Ns_TclTraceProc MailInterpInit;
+
+NS_EXPORT Ns_ModuleInitProc Ns_ModuleInit;
 NS_EXPORT int Ns_ModuleVersion = 1;
 
 /*
@@ -337,8 +337,8 @@ NS_EXPORT int Ns_ModuleVersion = 1;
 
 NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
 {
-    char *path;
-    static int first = 0;
+    const char *path;
+    static int  first = 0;
     mailServer *serverPtr;
 
     Ns_Log(Notice, "nsimap module version %s server: %s", _VERSION, server);
@@ -385,7 +385,7 @@ NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
         serverPtr->gc_interval = 600;
     Ns_ConfigGetInt(path, "debug", &serverPtr->debug);
     mail_parameters(0, SET_RSHTIMEOUT, 0);
-    mail_parameters(0, SET_PARSELINE, &mm_parseline);
+    mail_parameters(0, SET_PARSELINE, (void *)&mm_parseline);
     /* Schedule garbage collection proc for automatic session close/cleanup */
     if (serverPtr->gc_interval > 0) {
         Ns_ScheduleProc(mailGc, serverPtr, 1, serverPtr->gc_interval);
@@ -399,14 +399,14 @@ NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
 /*
  * Add ns_imap commands to interp.
  */
-static int MailInterpInit(Tcl_Interp * interp, void *arg)
+static int MailInterpInit(Tcl_Interp * interp, const void *arg)
 {
-    Tcl_CreateObjCommand(interp, "ns_imap", MailCmd, arg, NULL);
+    Tcl_CreateObjCommand(interp, "ns_imap", MailCmd, (void *)arg, NULL);
     return NS_OK;
 }
 
 // Returns index of the given option
-static int tclOption(int objc, Tcl_Obj * CONST objv[], int i, char *name, int single)
+static int tclOption(int objc, Tcl_Obj * CONST objv[], int i, const char *name, int single)
 {
     for (; i < objc; i++) {
         if (!strcmp(name, Tcl_GetString(objv[i]))) {
@@ -423,6 +423,7 @@ static int tclOption(int objc, Tcl_Obj * CONST objv[], int i, char *name, int si
 static mailSession *getSession(mailServer * server, unsigned long id)
 {
     mailSession *session;
+
     Ns_MutexLock(&server->mailMutex);
     for (session = server->sessions; session; session = session->next)
         if (session->id == id) {
@@ -437,13 +438,15 @@ static mailSession *getSession(mailServer * server, unsigned long id)
  */
 static void freeSession(mailServer * server, mailSession * session, int lock)
 {
-    if (!session)
+    if (session == NULL) {
         return;
-    if (server->debug)
-        Ns_Log(Debug, "ns_imap: free: 0x%p: %ld", session, session->id);
+    }
+    if (server->debug) {
+        Ns_Log(Debug, "ns_imap: free: 0x%p: %ld", (void *)session, session->id);
+    }
 
     /* Call atclose Tcl handler */
-    if (session->params) {
+    if (session->params != NULL) {
         char *proc = Ns_SetGet(session->params, "session.atclose");
         if (proc) {
             Ns_Conn *conn = Ns_GetConn();
@@ -499,7 +502,7 @@ static mailSession *openSession(mailServer * server, mailSession * session, int 
         session->headers = Ns_SetCreate("headers");
         session->server = server;
     }
-    session->uid = -1;
+    session->uid = 0;
     for (i = 2; i < objc; i++) {
         cmd = Tcl_GetStringFromObj(objv[i], 0);
         if (!strcmp(cmd, "-mailbox")) {
@@ -539,10 +542,12 @@ static mailSession *openSession(mailServer * server, mailSession * session, int 
             flags |= OP_SHORTCACHE;
     }
     if (server->debug) {
-        Ns_Log(Debug, "ns_imap: open: 0x%p: %ld: %s: %s", session, session->id, session->mailbox, session->user);
+        Ns_Log(Debug, "ns_imap: open: 0x%p: %ld: %s: %s", (void *)session, session->id, session->mailbox, session->user);
     }
     Ns_TlsSet(&mailTls, session);
-    if (!session->mailbox || !(session->stream = mail_open(session->stream, session->mailbox, flags))) {
+    if (session->mailbox == NULL
+        || !(session->stream = mail_open(session->stream, session->mailbox, flags))
+        ) {
         Tcl_AppendResult(interp, "Could not connect to mailbox: ", session->error, 0);
         freeSession(server, session, 1);
         return 0;
@@ -563,7 +568,7 @@ static mailSession *openSession(mailServer * server, mailSession * session, int 
     return session;
 }
 
-static void mailPair(Tcl_Interp * interp, Tcl_Obj * list, char *name, char *svalue, unsigned long lvalue, char *arrayName)
+static void mailPair(Tcl_Interp * interp, Tcl_Obj * list, const char *name, const char *svalue, unsigned long lvalue, char *arrayName)
 {
     if (!arrayName) {
         Tcl_ListObjAppendElement(interp, list, Tcl_NewStringObj(name, -1));
@@ -572,6 +577,11 @@ static void mailPair(Tcl_Interp * interp, Tcl_Obj * list, char *name, char *sval
         Tcl_SetVar2Ex(interp, arrayName, name, svalue ? Tcl_NewStringObj(svalue, -1) : Tcl_NewLongObj((long) lvalue), 0);
     }
 }
+
+#if 0
+/*
+ * seemingly unused functions
+ */
 
 static Tcl_Obj *_mailAddress(ADDRESS * addr)
 {
@@ -601,6 +611,7 @@ static void mailAddress(Tcl_Interp * interp, Tcl_Obj * list, char *name, ADDRESS
     } else
         Tcl_SetVar2Ex(interp, arrayName, name, _mailAddress(addr), 0);
 }
+#endif
 
 static void mailFlags(char *str, unsigned long *flags)
 {
@@ -625,7 +636,7 @@ static void mailFlags(char *str, unsigned long *flags)
         *flags |= SO_NOSERVER;
 }
 
-static void mailStatus(char *str, long *flags)
+static void mailStatus(const char *str, long *flags)
 {
     if (!*str) return;
     if (strstr(str, "MESSAGES"))
@@ -810,7 +821,7 @@ static int mailHeaders(mailSession * session, unsigned long msg)
     }
     session->uid = mail_uid(session->stream, msg);
     Ns_SetTrunc(session->headers, 0);
-    rfc822_parse_msg(&en, 0, hdr, strlen(hdr), 0, "UNKNOWN", 0);
+    rfc822_parse_msg(&en, 0, hdr, strlen(hdr), 0, (char *)"UNKNOWN", 0);
     mail_free_envelope(&en);
     sprintf(buf, "%lu", elt->rfc822_size);
     Ns_SetPut(session->headers, "X-Message-Size", buf);
@@ -864,7 +875,7 @@ static unsigned long mailParseMsgFlags(mailSession *session, unsigned long msg, 
     }
     if (msg > 0 && *flags & FT_UID) {
         if ((msg = mail_msgno(session->stream, msg))) {
-            *flags &= ~FT_UID;
+            *flags &= (unsigned long)~FT_UID;
         }
     }
     return msg;
@@ -880,7 +891,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
     unsigned int num;
     mailSession *session = 0;
     mailServer *server = arg;
-    unsigned long msg, flags = 0;
+    unsigned long msg, flags = 0u;
 
     enum commands {
         cmdGc, cmdSessions, cmdDecode, cmdEncode, cmdParseDate, cmdStripHtml,
@@ -961,10 +972,11 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
     }
 
     case cmdStripHtml:{
-        char *data;
-        static char *tags[] = { "BODY", "FRAME", "FRAMESET", "HEAD", "TITLE",
+        char              *data;
+        static const char *tags[] = { "BODY", "FRAME", "FRAMESET", "HEAD", "TITLE",
             "META", "DIV", "OBJECT", "EMBED", "BASE", 0
         };
+
         if (objc < 3) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " text ?tags?", 0);
             return TCL_ERROR;
@@ -975,22 +987,25 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
     }
 
     case cmdParseDate:{
-        MESSAGECACHE msg;
+        MESSAGECACHE msgCache;
+
         if (objc < 3) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " datestring", 0);
             return TCL_ERROR;
         }
-        if (mail_parse_date(&msg, (unsigned char*)Tcl_GetStringFromObj(objv[2], 0))) {
+        if (mail_parse_date(&msgCache, (unsigned char*)Tcl_GetStringFromObj(objv[2], 0))) {
             struct tm lt;
-            time_t t;
-            lt.tm_min = msg.minutes;
-            lt.tm_sec = msg.seconds;
-            lt.tm_hour = msg.hours;
-            lt.tm_mday = msg.day;
-            lt.tm_mon = msg.month - 1;
-            lt.tm_year = BASEYEAR + msg.year - 1900;
+            time_t    t;
+
+            lt.tm_min = msgCache.minutes;
+            lt.tm_sec = msgCache.seconds;
+            lt.tm_hour = msgCache.hours;
+            lt.tm_mday = msgCache.day;
+            lt.tm_mon = msgCache.month - 1;
+            lt.tm_year = BASEYEAR + msgCache.year - 1900;
             if ((t = mktime(&lt)) > 0) {
                 char buf[32] = "";
+
                 sprintf(buf, "%lu", t);
                 Tcl_AppendResult(interp, buf, 0);
             }
@@ -1000,32 +1015,34 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
 
     case cmdDecode:{
         // Decode text into plain 8bit string
-        char *data;
-        void *vdata;
-        int len = 0;
+        char         *data;
+        void         *vdata = NULL;
+        int           len = 0;
         unsigned long llen;
+
         if (objc < 4) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " type text", 0);
             return TCL_ERROR;
         }
+
         data = (char *) Tcl_GetByteArrayFromObj(objv[3], (int *) &len);
         // Decode BASE64 encoded text */
         if (!strcmp(Tcl_GetStringFromObj(objv[2], 0), "base64")) {
-            vdata = (char *) rfc822_base64((unsigned char*)data, num = len, &llen);
+            vdata = (char *) rfc822_base64((unsigned char*)data, (unsigned long)len, &llen);
             Tcl_SetObjResult(interp, Tcl_NewByteArrayObj(vdata, (int) llen));
             fs_give(&vdata);
             return TCL_OK;
         } else
             // Convert a quoted-printable string to an 8-bit string */
         if (!strcmp(Tcl_GetStringFromObj(objv[2], 0), "qprint")) {
-            vdata = (char *) rfc822_qprint((unsigned char*)data, num = len, &llen);
+            vdata = (char *) rfc822_qprint((unsigned char*)data, (unsigned long)len, &llen);
             Tcl_SetObjResult(interp, Tcl_NewByteArrayObj(vdata, (int) llen));
             fs_give(&vdata);
             return TCL_OK;
         } else
             // Convert a UTF7 an 8-bit string */
         if (!strcmp(Tcl_GetStringFromObj(objv[2], 0), "utf7")) {
-            if ((data = utf7_decode(data, (int) (num = len), &len))) {
+            if ((data = utf7_decode(data, len, &len))) {
                 Tcl_SetObjResult(interp, Tcl_NewByteArrayObj((unsigned char*)data, (int) len));
                 ns_free(vdata);
                 return TCL_OK;
@@ -1048,21 +1065,21 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         data = (char *) Tcl_GetByteArrayFromObj(objv[3], (int *) &len);
         // Convert an 8bit string to a quoted printable string */
         if (!strcmp(Tcl_GetStringFromObj(objv[2], 0), "qprint")) {
-            vdata = (char *) rfc822_8bit((unsigned char*)data, num = len, &llen);
+            vdata = (char *) rfc822_8bit((unsigned char*)data, (unsigned long)len, &llen);
             Tcl_SetObjResult(interp, Tcl_NewStringObj(vdata, (int) llen));
             fs_give(&vdata);
             return TCL_OK;
         } else
             // Convert an 8bit string to a base64 string */
         if (!strcmp(Tcl_GetStringFromObj(objv[2], 0), "base64")) {
-            vdata = (char *) rfc822_binary((unsigned char*)data, num = len, &llen);
+            vdata = (char *) rfc822_binary((unsigned char*)data, (unsigned long)len, &llen);
             Tcl_SetObjResult(interp, Tcl_NewStringObj(vdata, (int) llen));
             fs_give(&vdata);
             return TCL_OK;
         } else
             // Convert a 8-bit string into UTF7 */
         if (!strcmp(Tcl_GetStringFromObj(objv[2], 0), "utf7")) {
-            if ((data = utf7_encode(data, (int) (num = len), &len))) {
+            if ((data = utf7_encode(data, len, &len))) {
                 Tcl_SetObjResult(interp, Tcl_NewStringObj(data, (int) len));
                 ns_free(data);
                 return TCL_OK;
@@ -1093,7 +1110,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
 
     case cmdExpunge:
         // Permanently delete all messages marked for deletion
-        session->uid = -1;
+        session->uid = 0;
         mail_expunge(session->stream);
         if (session->error) {
             Tcl_AppendResult(interp, session->error, 0);
@@ -1173,7 +1190,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
             session->params = Ns_SetCreate("params");
         }
         if ((index = Ns_SetFind(session->params, Tcl_GetStringFromObj(objv[3], 0))) > -1) {
-            Ns_SetPutValue(session->params, index, Tcl_GetStringFromObj(objv[4], 0));
+            Ns_SetPutValue(session->params, (size_t)index, Tcl_GetStringFromObj(objv[4], 0));
         } else {
             Ns_SetPut(session->params, Tcl_GetStringFromObj(objv[3], 0), Tcl_GetStringFromObj(objv[4], 0));
         }
@@ -1191,7 +1208,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         }
         index = tclOption(objc, objv, 5, "-flags", 0);
 
-        session->uid = -1;
+        session->uid = 0;
         text = Tcl_GetStringFromObj(objv[4], (int*)&len);
         INIT(&st, mail_string, text, len);
         if (!mail_append_full(session->stream, Tcl_GetString(objv[3]), index > 0 ? Tcl_GetString(objv[index]) : 0, 0, &st)) {
@@ -1209,7 +1226,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         }
         mailParseMsgFlags(session, msg, &flags, objc, objv);
 
-        if (!mail_copy_full(session->stream, Tcl_GetString(objv[3]), Tcl_GetString(objv[4]), flags)) {
+        if (!mail_copy_full(session->stream, Tcl_GetString(objv[3]), Tcl_GetString(objv[4]), (long)flags)) {
             Tcl_AppendResult(interp, session->error, 0);
             return TCL_ERROR;
         }
@@ -1223,8 +1240,8 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         }
         mailParseMsgFlags(session, msg, &flags, objc, objv);
 
-        session->uid = -1;
-        if (!mail_copy_full(session->stream, Tcl_GetString(objv[3]), Tcl_GetString(objv[4]), flags | CP_MOVE)) {
+        session->uid = 0;
+        if (!mail_copy_full(session->stream, Tcl_GetString(objv[3]), Tcl_GetString(objv[4]), (long)(flags | CP_MOVE))) {
             Tcl_AppendResult(interp, session->error, 0);
             return TCL_ERROR;
         }
@@ -1235,7 +1252,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         if (!session->stream) {
             break;
         }
-        Tcl_SetObjResult(interp, Tcl_NewIntObj(mail_ping(session->stream)));
+        Tcl_SetObjResult(interp, Tcl_NewLongObj(mail_ping(session->stream)));
         break;
 
     case cmdCheck:
@@ -1357,10 +1374,10 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         if (decode || mode) {
             switch (body->encoding) {
             case ENCBASE64:
-                text = data = (char *) rfc822_base64((unsigned char*)text, num = len, &len);
+                text = data = (char *) rfc822_base64((unsigned char*)text, (unsigned long)len, &len);
                 break;
             case ENCQUOTEDPRINTABLE:
-                text = data = (char *) rfc822_qprint((unsigned char*)text, num = len, &len);
+                text = data = (char *) rfc822_qprint((unsigned char*)text, (unsigned long)len, &len);
             }
         }
         // Discover attachement file name
@@ -1488,46 +1505,46 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         }
         break;
 
-    case cmdDelete:{
+    case cmdDelete:
         // Mark a message(s) for deletion
-        long flags = 0;
+
         if (objc < 4) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " #s sequence ?-flags flags?", 0);
             return TCL_ERROR;
         }
-        msg = mailParseMsgFlags(session, msg, (unsigned long*)&flags, objc, objv);
-        session->uid = -1;
+        msg = mailParseMsgFlags(session, msg, &flags, objc, objv);
+        session->uid = 0;
 
-        mail_setflag_full(session->stream, Tcl_GetString(objv[3]), "\\DELETED", flags);
+        mail_setflag_full(session->stream, Tcl_GetString(objv[3]), (char*)"\\DELETED", (long)flags);
         if (session->error) {
             Tcl_AppendResult(interp, session->error, 0);
             return TCL_ERROR;
         }
         break;
-    }
 
-    case cmdUndelete:{
+
+    case cmdUndelete:
         // Remove the delete flag from a message(s)
-        long flags = 0;
+
         if (objc < 4) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " #s sequence ?-flags flags?", 0);
             return TCL_ERROR;
         }
-        msg = mailParseMsgFlags(session, msg, (unsigned long*)&flags, objc, objv);
+        msg = mailParseMsgFlags(session, msg, &flags, objc, objv);
 
-        mail_clearflag_full(session->stream, Tcl_GetString(objv[3]), "\\DELETED", flags);
+        mail_clearflag_full(session->stream, Tcl_GetString(objv[3]), (char*)"\\DELETED", (long)flags);
         if (session->error) {
             Tcl_AppendResult(interp, session->error, 0);
             return TCL_ERROR;
         }
         break;
-    }
+
 
     case cmdGetFlags: {
         // Returns message flags
-        long flags = 0;
         char buf[16] = "";
         MESSAGECACHE *elt;
+
         if (objc < 4) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " #s msgno ?-flags flags?", 0);
             return TCL_ERROR;
@@ -1535,9 +1552,9 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         if (Tcl_GetLongFromObj(interp, objv[3], (long*)&msg) != TCL_OK) {
             return TCL_ERROR;
         }
-        msg = mailParseMsgFlags(session, msg, (unsigned long*)&flags, objc, objv);
+        msg = mailParseMsgFlags(session, msg, &flags, objc, objv);
 
-        mail_fetch_flags(session->stream, Tcl_GetString(objv[3]), flags);
+        mail_fetch_flags(session->stream, Tcl_GetString(objv[3]), (long)flags);
         if ((elt = mail_elt(session->stream, msg))) {
             mailParseFlags(elt, buf);
         }
@@ -1545,39 +1562,37 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         break;
     }
 
-    case cmdSetFlags:{
+    case cmdSetFlags:
         // Set message flags
-        long flags = 0;
+
         if (objc < 5) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " #s sequence flag ?-flags flags?", 0);
             return TCL_ERROR;
         }
-        msg = mailParseMsgFlags(session, msg, (unsigned long*)&flags, objc, objv);
+        msg = mailParseMsgFlags(session, msg, &flags, objc, objv);
 
-        mail_setflag_full(session->stream, Tcl_GetString(objv[3]), Tcl_GetString(objv[4]), flags);
+        mail_setflag_full(session->stream, Tcl_GetString(objv[3]), Tcl_GetString(objv[4]), (long)flags);
         if (session->error) {
             Tcl_AppendResult(interp, session->error, 0);
             return TCL_ERROR;
         }
         break;
-    }
 
-    case cmdClearFlags:{
+    case cmdClearFlags:
         // Clear message flags
-        long flags = 0;
+
         if (objc < 5) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " #s sequence flag ?-flags flags?", 0);
             return TCL_ERROR;
         }
         msg = mailParseMsgFlags(session, msg, (unsigned long*)&flags, objc, objv);
 
-        mail_clearflag_full(session->stream, Tcl_GetString(objv[3]), Tcl_GetString(objv[4]), flags);
+        mail_clearflag_full(session->stream, Tcl_GetString(objv[3]), Tcl_GetString(objv[4]), (long)flags);
         if (session->error) {
             Tcl_AppendResult(interp, session->error, 0);
             return TCL_ERROR;
         }
         break;
-    }
 
     case cmdLsub:
         // Return a list of subscribed mailboxes
@@ -1596,13 +1611,13 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
 
     case cmdSort:{
         // Sort an array of message headers
-        long flags = 0;
-        SORTPGM pgm;
-        void *vdata;
-        SEARCHPGM *spg = 0;
-        unsigned long *id, *ids;
+        SORTPGM            pgm;
+        void              *vdata;
+        SEARCHPGM         *spg = 0;
+        unsigned long     *id, *ids;
         static const char *sSort[] = { "date", "arrival", "from", "subject", "to", "cc", "size", 0 };
-        static int iSort[] = { SORTDATE, SORTARRIVAL, SORTFROM, SORTSUBJECT, SORTTO, SORTCC, SORTSIZE };
+        static short       iSort[] = { SORTDATE, SORTARRIVAL, SORTFROM, SORTSUBJECT, SORTTO, SORTCC, SORTSIZE };
+
         if (objc < 5) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " #s criteria reverse ?-flags flags?", 0);
             return TCL_ERROR;
@@ -1610,7 +1625,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         if (Tcl_GetIndexFromObj(interp, objv[3], sSort, "option", TCL_EXACT, (int*)&num) != TCL_OK) {
             return TCL_ERROR;
         }
-        msg = mailParseMsgFlags(session, msg, (unsigned long*)&flags, objc, objv);
+        msg = mailParseMsgFlags(session, msg, &flags, objc, objv);
 
         memset(&pgm, 0, sizeof(pgm));
         pgm.function = iSort[num];
@@ -1618,7 +1633,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
             pgm.reverse = index ? 1 : 0;
         }
         spg = mail_newsearchpgm();
-        if ((vdata = ids = mail_sort(session->stream, 0, spg, &pgm, flags))) {
+        if ((vdata = ids = mail_sort(session->stream, 0, spg, &pgm, (long)flags))) {
             session->list = Tcl_NewListObj(0, 0);
             for (id = ids; *id; id++) {
                 Tcl_ListObjAppendElement(interp, session->list, Tcl_NewIntObj((int) *id));
@@ -1636,8 +1651,9 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
 
     case cmdSearch:{
         // Search message headers
-        SEARCHPGM *crit = 0;
+        SEARCHPGM    *crit = 0;
         unsigned long id;
+
         if (objc < 4) {
             Tcl_AppendResult(interp, "wrong # args: should be ns_imap ", sCmd[cmd], " #s criteria", 0);
             return TCL_ERROR;
@@ -1652,7 +1668,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
             session->list = Tcl_NewListObj(0, 0);
             for (id = 1; id <= session->stream->nmsgs; id++) {
                 if (mail_elt(session->stream, id)->searched) {
-                    Tcl_ListObjAppendElement(interp, session->list, Tcl_NewIntObj(id));
+                    Tcl_ListObjAppendElement(interp, session->list, Tcl_NewWideIntObj((Tcl_WideInt)id));
                 }
             }
             Tcl_SetObjResult(interp, session->list);
@@ -1728,8 +1744,9 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         break;
 
     case cmdStatus:{
-        long flags = 0;
-        char *status_flags;
+        long        lflags = 0;
+        const char *status_flags;
+
         // Get status info from a mailbox
         if (objc != 4) {
             status_flags = "OPENTIME LASTACCESS USERFLAGS MESSAGES RECENT UNSEEN UIDNEXT UIDVALIDITY";
@@ -1738,18 +1755,18 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
         }
         session->list = Tcl_NewListObj(0, 0);
         if (strstr(status_flags, "OPENTIME")) {
-            mailPair(interp, session->list, "Open Time", 0, session->open_time, 0);
+            mailPair(interp, session->list, "Open Time", 0, (unsigned long)session->open_time, 0);
         }
         if (strstr(status_flags, "LASTACCESS")) {
-            mailPair(interp, session->list, "Last Access Time", 0, session->access_time, 0);
+            mailPair(interp, session->list, "Last Access Time", 0, (unsigned long)session->access_time, 0);
         }
         if (session->stream->mailbox) {
             if (strstr(status_flags, "MAILBOX")) {
                 mailPair(interp, session->list, "Mailbox", session->stream->mailbox, 0, 0);
             }
         }
-        mailStatus(status_flags, &flags);
-        mail_status(session->stream, session->stream->mailbox, flags);
+        mailStatus(status_flags, &lflags);
+        mail_status(session->stream, session->stream->mailbox, lflags);
         if (strstr(status_flags, "USERFLAGS")) {
             for (num = 0; num < NUSERFLAGS && session->stream->user_flags[num]; ++num) {
                 Tcl_ListObjAppendElement(interp, session->list, Tcl_NewStringObj(session->stream->user_flags[num], -1));
@@ -1816,35 +1833,37 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
 }
 
 /* Interfaces to C-client */
-void mm_searched(MAILSTREAM * stream, unsigned long number)
+void mm_searched(MAILSTREAM * UNUSED(stream), unsigned long UNUSED(number))
 {
 }
 
-void mm_exists(MAILSTREAM * stream, unsigned long number)
+void mm_exists(MAILSTREAM * UNUSED(stream), unsigned long UNUSED(number))
 {
 }
 
-void mm_expunged(MAILSTREAM * stream, unsigned long number)
+void mm_expunged(MAILSTREAM * UNUSED(stream), unsigned long UNUSED(number))
 {
 }
 
-void mm_flags(MAILSTREAM * stream, unsigned long number)
+void mm_flags(MAILSTREAM * UNUSED(stream), unsigned long UNUSED(number))
 {
 }
 
-void mm_notify(MAILSTREAM * stream, char *string, long errflg)
+void mm_notify(MAILSTREAM * UNUSED(stream), char *string, long errflg)
 {
     mm_log(string, errflg);
 }
 
-void mm_list(MAILSTREAM * stream, int delimiter, char *mailbox, long attrs)
+void mm_list(MAILSTREAM * UNUSED(stream), int UNUSED(delimiter), char *mailbox, long attrs)
 {
     mailSession *session = Ns_TlsGet(&mailTls);
-    Tcl_Obj *attr;
+    Tcl_Obj     *attr;
+    char        *name;
 
     if (!session) return;
     attr = Tcl_NewListObj(0, 0);
-    char *name = strchr(mailbox, '}');
+    name = strchr(mailbox, '}');
+
     if (name) {
         name++;
     } else {
@@ -1871,7 +1890,7 @@ void mm_lsub(MAILSTREAM * stream, int delimiter, char *mailbox, long attrs)
     mm_list(stream, delimiter, mailbox, attrs);
 }
 
-void mm_status(MAILSTREAM * stream, char *mailbox, MAILSTATUS * status)
+void mm_status(MAILSTREAM * UNUSED(stream), char *UNUSED(mailbox), MAILSTATUS * status)
 {
     mailSession *session = Ns_TlsGet(&mailTls);
     if (!session) return;
@@ -1920,7 +1939,7 @@ void mm_dlog(char *string)
     mm_log(string, 0);
 }
 
-void mm_login(NETMBX * mb, char *user, char *passwd, long trial)
+void mm_login(NETMBX * mb, char *user, char *passwd, long UNUSED(trial))
 {
     mailSession *session = Ns_TlsGet(&mailTls);
 
@@ -1931,15 +1950,15 @@ void mm_login(NETMBX * mb, char *user, char *passwd, long trial)
     strncpy(passwd, session->passwd ? session->passwd : "", MAILTMPLEN);
 }
 
-void mm_critical(MAILSTREAM * stream)
+void mm_critical(MAILSTREAM * UNUSED(stream))
 {
 }
 
-void mm_nocritical(MAILSTREAM * stream)
+void mm_nocritical(MAILSTREAM * UNUSED(stream))
 {
 }
 
-long mm_diskerror(MAILSTREAM * stream, long errcode, long serious)
+long mm_diskerror(MAILSTREAM * UNUSED(stream), long UNUSED(errcode), long UNUSED(serious))
 {
     return 0;
 }
@@ -1957,7 +1976,7 @@ void mm_fatal(char *string)
     longjmp(session->jmp, 1);
 }
 
-static void mm_parseline(ENVELOPE * env, char *hdr, char *data, char *host)
+static void mm_parseline(ENVELOPE * UNUSED(env), char *hdr, char *data, char *UNUSED(host))
 {
     mailSession *session = Ns_TlsGet(&mailTls);
 
@@ -1965,7 +1984,7 @@ static void mm_parseline(ENVELOPE * env, char *hdr, char *data, char *host)
     Ns_SetPut(session->headers, hdr, data);
 }
 
-static void mm_getquota(MAILSTREAM * stream, char *qroot, QUOTALIST * qlist)
+static void mm_getquota(MAILSTREAM * UNUSED(stream), char *UNUSED(qroot), QUOTALIST * qlist)
 {
     mailSession *session = Ns_TlsGet(&mailTls);
 
@@ -2069,7 +2088,7 @@ static char *utf7_decode(char *in, int inlen, int *outlen)
             /* decode input character */
             switch (state) {
             case ST_DECODE0:
-                *outp = UNB64(*inp) << 2;
+                *outp = UCHAR(UNB64(*inp) << 2);
                 state = ST_DECODE1;
                 break;
             case ST_DECODE1:
@@ -2152,7 +2171,7 @@ static char *utf7_encode(char *in, int inlen, int *outlen)
         } else if (inp == endp || !SPECIAL(*inp)) {
             /* flush overflow and terminate region */
             if (state != ST_ENCODE0) {
-                *outp = B64(*outp);
+                *outp = UCHAR(B64(*outp));
                 outp++;
             }
             *outp++ = '-';
@@ -2161,20 +2180,20 @@ static char *utf7_encode(char *in, int inlen, int *outlen)
             /* encode input character */
             switch (state) {
             case ST_ENCODE0:
-                *outp++ = B64(*inp >> 2);
-                *outp = *inp++ << 4;
+                *outp++ = UCHAR(B64(*inp >> 2));
+                *outp = UCHAR(*inp++ << 4);
                 state = ST_ENCODE1;
                 break;
             case ST_ENCODE1:
-                *outp = B64(*outp | *inp >> 4);
+                *outp = UCHAR(B64(*outp | *inp >> 4));
                 outp++;
-                *outp = *inp++ << 2;
+                *outp = UCHAR(*inp++ << 2);
                 state = ST_ENCODE2;
                 break;
             case ST_ENCODE2:
-                *outp = B64(*outp | *inp >> 6);
+                *outp = UCHAR(B64(*outp | *inp >> 6));
                 outp++;
-                *outp++ = B64(*inp++);
+                *outp++ = UCHAR(B64(*inp++));
                 state = ST_ENCODE0;
             case ST_NORMAL:
                 break;
@@ -2185,7 +2204,7 @@ static char *utf7_encode(char *in, int inlen, int *outlen)
     return (char*)out;
 }
 
-static char *strStripHtml(char *str, char *tags[])
+static char *strStripHtml(char *str, const char *tags[])
 {
     int i;
     char *tag = 0, *ptr, *buf, *end, c;
@@ -2240,8 +2259,19 @@ static char *strStripHtml(char *str, char *tags[])
 static char *strLower(char *str)
 {
     int i;
-    for (i = 0; str[i]; i++)
-        if (!(str[i] & 0x80) && isupper(str[i]))
-            str[i] = tolower(str[i]);
+    for (i = 0; str[i]; i++) {
+        if (!(str[i] & 0x80) && isupper(str[i])) {
+            str[i] = CHARCONV(lower, str[i]);
+        }
+    }
     return str;
 }
+
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 4
+ * fill-column: 78
+ * indent-tabs-mode: nil
+ * End:
+ */

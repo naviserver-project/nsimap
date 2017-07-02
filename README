@@ -18,10 +18,15 @@ It allows to use NaviServer as IMAP client and build Web based IMAP applications
 **   in macro SPECIALS change
 **      /usr/include/openssl -> /opt/local/include/openssl
 **      /usr/lib             -> /opt/local/lib
-**    twice (for SSL* and GSS*)
+**    twice (for SSL* and GSS*) and compile with e.g. "make osx"
 **
 ** - in nsimap: build with
 **      make IMAPFLAGS=-I../imap-2007f/c-client/ "IMAPLIBS=../imap-2007f/c-client/c-client.a -L/opt/local/lib/ -lpam -lgssapi_krb5 -lkrb5"
+**
+** In order to compile with panda-imap https://github.com/jonabbey/panda-imap
+**   - get the git repo to ../panda-imap
+**   - change SPECIALS as above, and compile panda-imap
+**   - use in the ns-imap build command "panda-imap" instead of "imap-2007f"
 **
 **   Path adjustments for other targets are as well not unlikely
 **
