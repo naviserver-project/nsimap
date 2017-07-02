@@ -1,10 +1,30 @@
 IMAP Module for NaviServer 4.x
-Release 3.2.3
+Release 3.4
 vlad@crystalballinc.com
 
 This is NaviServer module that implements IMAP4 interface.
 It is based on UW IMAP c-client library from http://www.washington.edu/imap/. 
 It allows to use NaviServer as IMAP client and build Web based IMAP applications.
+
+**
+** Update July 2017 (compiled with NaviServer 4.99.16 under MacOS 10.12.5):
+**
+** - Obtained c-client.tar.gz from ftp://ftp.ntua.gr/pub/net/mail/imap/
+**
+** - expanded c-client under ../imap-2007f/
+**
+** - to use OpenSSL from MacPorts, on has to adjust the paths
+**   in the "osx:" target in the c-client Makefile:
+**   in macro SPECIALS change
+**      /usr/include/openssl -> /opt/local/include/openssl
+**      /usr/lib             -> /opt/local/lib
+**    twice (for SSL* and GSS*)
+**
+** - in nsimap: build with
+**      make IMAPFLAGS=-I../imap-2007f/c-client/ "IMAPLIBS=../imap-2007f/c-client/c-client.a -L/opt/local/lib/ -lpam -lgssapi_krb5 -lkrb5"
+**
+**   Path adjustments for other targets are as well not unlikely
+**
 
 /*--------------------------------------------------------------------*/
 

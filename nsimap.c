@@ -282,9 +282,9 @@
 #include "fs.h"
 #include <setjmp.h>
 
-NS_RCSID("@(#) $Header: /cvsroot/naviserver/modules/nsimap/nsimap.c,v 1.16 2008/03/26 20:18:04 seryakov Exp $");
+//NS_RCSID("@(#) $Header: /cvsroot/naviserver/modules/nsimap/nsimap.c,v 1.16 2008/03/26 20:18:04 seryakov Exp $");
 
-#define _VERSION  "3.3"
+#define _VERSION  "3.4"
 
 typedef struct _mailSession {
     struct _mailSession *next, *prev;
@@ -335,7 +335,7 @@ NS_EXPORT int Ns_ModuleVersion = 1;
  * Load the config parameters, setup the structures
  */
 
-NS_EXPORT int Ns_ModuleInit(char *server, char *module)
+NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
 {
     char *path;
     static int first = 0;
@@ -368,7 +368,7 @@ NS_EXPORT int Ns_ModuleInit(char *server, char *module)
         auth_link(&auth_pla);
         auth_link(&auth_log);
     }
-#ifdef SSL
+#ifdef HAVE_OPENSSL_EVP_H
     ssl_onceonlyinit();
 #endif
     // UW Imap sends USR2
