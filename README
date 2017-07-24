@@ -77,7 +77,7 @@ Usage
         by default it removes body/title/div/object/frame tags.
         If tags are specified it will use them instead of internal list.
  
-      ns_imap open -mailbox mailbox ?-user u -password p -debug -expunge -anonymous -shortcache -readonly -halfopen -reopen?
+      ns_imap open -mailbox mailbox ?-user u -password p -debug -expunge -anonymous -shortcache -readonly -halfopen -reopen -novalidatecert?
         creates new mail session for specified mailbox. Optional parameters
         can be specified. Returns mail descriptor which should be used in subsequent
         calls. In order to preserve {} in the IMAP mailbox name the whole

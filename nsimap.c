@@ -508,38 +508,33 @@ static mailSession *openSession(mailServer * server, mailSession * session, int 
         if (!strcmp(cmd, "-mailbox")) {
             ns_free(session->mailbox);
             session->mailbox = ns_strcopy(Tcl_GetStringFromObj(objv[++i], 0));
-        } else
-        if (!strcmp(cmd, "-reopen")) {
+        } else if (!strcmp(cmd, "-reopen")) {
             if (session->stream) {
                 mail_close_full(session->stream, 0);
             }
             session->stream = 0;
-        } else
-        if (!strcmp(cmd, "-user")) {
+        } else if (!strcmp(cmd, "-user")) {
             ns_free(session->user);
             session->user = ns_strcopy(Tcl_GetStringFromObj(objv[++i], 0));
-        } else
-        if (!strcmp(cmd, "-password")) {
+        } else if (!strcmp(cmd, "-password")) {
             ns_free(session->passwd);
             session->passwd = ns_strcopy(Tcl_GetStringFromObj(objv[++i], 0));
-        } else
-        if (!strcmp(cmd, "-readonly"))
+        } else if (!strcmp(cmd, "-readonly")) {
             flags |= OP_READONLY;
-        else
-        if (!strcmp(cmd, "-debug"))
+        } else if (!strcmp(cmd, "-debug")) {
             flags |= OP_DEBUG;
-        else
-        if (!strcmp(cmd, "-anonymous"))
+        } else if (!strcmp(cmd, "-anonymous")) {
             flags |= OP_ANONYMOUS;
-        else
-        if (!strcmp(cmd, "-halfopen"))
+        } else if (!strcmp(cmd, "-halfopen")) {
             flags |= OP_HALFOPEN;
-        else
-        if (!strcmp(cmd, "-expunge"))
+        } else if (!strcmp(cmd, "-expunge")) {
             flags |= OP_EXPUNGE;
-        else
-        if (!strcmp(cmd, "-shortcache"))
+        } else if (!strcmp(cmd, "-shortcache")) {
             flags |= OP_SHORTCACHE;
+        } else if (!strcmp(cmd, "-novalidatecert")) {
+            flags |= NET_NOVALIDATECERT;
+        }
+
     }
     if (server->debug) {
         Ns_Log(Debug, "ns_imap: open: 0x%p: %ld: %s: %s", (void *)session, session->id, session->mailbox, session->user);
