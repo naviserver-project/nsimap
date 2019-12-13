@@ -1,6 +1,6 @@
 2007-03-07 Vlad Seryakov  vlad@crystalballinc.com
 
-	* silence compiler warnigns
+	* silence compiler warnings
 
 2006-08-24 Vlad Seryakov  vlad@crystalballinc.com
 
@@ -90,7 +90,7 @@
 2002-04-03 Vlad Seryakov vlad@crystalballinc.com
 
 	* Replaced session.atclose handler code using the same
-          Tcl interpeter as connection.
+          Tcl interpreter as connection.
 
 2002-06-02 Vlad Seryakov vlad@crystalballinc.com
 

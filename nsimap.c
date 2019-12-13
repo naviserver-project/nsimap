@@ -253,7 +253,7 @@
  *        mailbox - returns canonical mailbox name
  *        mailbox.name - returns just mailbox file name
  *        mailbox.host - returns remote host and options without mailbox name
- *        user - returns name of the logged in user
+ *        user - returns name of the logged-in user
  *        authuser - returns authentication user name
  *        host - returns mail host name
  *        password - return session password
@@ -1375,7 +1375,7 @@ static int MailCmd(ClientData arg, Tcl_Interp * interp, int objc, Tcl_Obj * CONS
                 text = data = (char *) rfc822_qprint((unsigned char*)text, (unsigned long)len, &len);
             }
         }
-        // Discover attachement file name
+        // Discover attachment file name
         for (filename = body->disposition.parameter; filename; filename = filename->next) {
             if (!strcasecmp(filename->attribute, "filename"))
                 break;
