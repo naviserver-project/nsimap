@@ -328,8 +328,8 @@ static void mm_getquota(MAILSTREAM * stream, char *qroot, QUOTALIST * qlist);
 static Ns_Tls mailTls;
 static Ns_TclTraceProc MailInterpInit;
 
-NS_EXPORT Ns_ModuleInitProc Ns_ModuleInit;
 NS_EXPORT int Ns_ModuleVersion = 1;
+NS_EXPORT Ns_ModuleInitProc Ns_ModuleInit;
 
 /*
  * Load the config parameters, setup the structures
