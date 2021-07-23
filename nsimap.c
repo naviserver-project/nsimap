@@ -187,7 +187,7 @@
  *      Resulting Tcl list consists from pairs { mailbox attributes .... }
  *      ns_imap lsub returns only subscribed mailboxes.
  *      Example:
- *           oss2:nscp 4> ns_imap list 1 {{localhost}} mail/*
+ *           oss2:nscp 4> ns_imap list 1 {{localhost}} mail/\*
  *           mail/ noselect mail/text {noinferiors unmarked}
  *           mail/private {noinferiors unmarked} mail/trash {noinferiors unmarked}
  *
@@ -335,7 +335,7 @@ NS_EXPORT Ns_ModuleInitProc Ns_ModuleInit;
  * Load the config parameters, setup the structures
  */
 
-NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
+NS_EXPORT Ns_ReturnCode Ns_ModuleInit(const char *server, const char *module)
 {
     const char *path;
     static int  first = 0;
@@ -399,7 +399,7 @@ NS_EXPORT int Ns_ModuleInit(const char *server, const char *module)
 /*
  * Add ns_imap commands to interp.
  */
-static int MailInterpInit(Tcl_Interp * interp, const void *arg)
+static Ns_ReturnCode MailInterpInit(Tcl_Interp * interp, const void *arg)
 {
     Tcl_CreateObjCommand(interp, "ns_imap", MailCmd, (void *)arg, NULL);
     return NS_OK;
