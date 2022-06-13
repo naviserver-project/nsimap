@@ -1,124 +1,68 @@
-2007-03-07 Vlad Seryakov  vlad@crystalballinc.com
+commit aa1cc6cb48a2c3cb3e953f79231f66500e8d595b
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2021-07-23
 
-	* silence compiler warnings
+    modernize code
 
-2006-08-24 Vlad Seryakov  vlad@crystalballinc.com
+M	nsimap.c
 
-	* code updates and cleanups
+commit 2c302c5a98633bf65df06aef2d606cf58af70333
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2021-01-10
 
-2006-06-24 Vlad Seryakov  vlad@crystalballinc.com
+    align module initialization
 
-	* silence compiler warnings
-	* check for session tls in the callbacks
+M	nsimap.c
 
-2005-08-01 Vlad Seryakov  vlad@crystalballinc.com
+commit a1fa14665d295a5e7b232321612768dde0c32edc
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2019-12-13
 
-	* removed old compat functions
+    improve spelling
 
-2004-02-19 Vlad Seryakov  vlad@crystalballinc.com
+M	ChangeLog
+M	nsimap.c
 
-        * UID support added to all commands, thanks to Neophytos Demetriou
+commit 2944fd5b7e478bcff4947b7311b3a366d4ae9519
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-07-24
 
-2004-08-17 Neophytos Demetriou <k2pts@cytanet.com.cy>
+    Adding optional flag "-novalidatecert" to "ns_imap open" (name from the flag of the imap implementation)
 
-        * Internal date added to message struct
+M	README
+M	nsimap.c
 
-2004-02-11 Vlad Seryakov  vlad@crystalballinc.com
+commit cc6068c5fef85a0c7d3c25fee883c76ddfaba4ab
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-07-02
 
-        * Signed/unsigned integer index corrcted
+    Update code to meet current engineering standards
+    (add const declarations, reduce implicit loss of sign, mark unused arguments, remove shadowed variables, initialize variables when needed)
 
-2003-06-06 Vlad Seryakov  vlad@crystalballinc.com
+M	README
+M	nsimap.c
 
-        * Stream close crash fixed, some minor changes
+commit b7700c339b3d6a67a6ddf3e0c964e3d6babaf08d
+Author: Gustaf Neumann <neumann@wu-wien.ac.at>
+Date:   2017-07-02
 
-2003-05-19 Vlad Seryakov  vlad@crystalballinc.com
+    - since SSL is used in newer versions of NaviServer, modernize check for SSL
+    - add configuration hints for Mac OS X
+    - bump version number
 
-        * File return fixes in ns_imap body command
+M	Makefile
+M	README
+M	nsimap.c
 
-2003-05-08 Scott Goodwin  <scott@scottg.net>
+commit 9de8eb7c792a22c89e9000abe3e38ed3fdcd26e1
+Author: Vlad Seryakov <vseryakov@gmail.com>
+Date:   2009-03-10
 
-        * Initial import into AOLserver SourceForge.
+    initial import
 
-2003-04-28 Mat Kovach mkovach@alal.com
-
-        * Modified ns_imap status to return Last Access, Open Time,
-          Messages, Recent, Unseen, Uidnext, Uidvalidity and
-          allow ns_imap to be controlled by flags
-
-2003-04-20 Vlad Seryakov vlad@crystalballinc.com
-
-        * Aolserver 4 support.
-
-2003-03-09 Jamie Rasmussen jamie@mle.media.mit.edu
-
-	* Logical |= should have been used instead of !=
-	* Added Win32 compilation support
-
-2003-02-06 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixed a bug with infinite loop during fatal error
-
-2002-12-08 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixed a bug in memory allocation/freeing
-
-2002-10-03 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixed a bug in garbage collection function
-
-2002-09-29 Vlad Seryakov vlad@crystalballinc.com
-
-	* Renamed ns_mail into ns_imap
-
-2002-07-05 Vlad Seryakov vlad@crystalballinc.com
-
-        * Mime types handling for multipart messages, uses
-          Aolserver mime types
-
-2002-06-09 Vlad Seryakov vlad@crystalballinc.com
-
-        * Bug fixes in quota and acl commands
-
-2002-06-06 Vlad Seryakov vlad@crystalballinc.com
-
-        * Added quota and ACL commands
-
-2002-06-05 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixes in README, thanks to Denis Roy (droy@sussdorff-roy.com)
-
-2002-04-03 Vlad Seryakov vlad@crystalballinc.com
-
-	* Replaced session.atclose handler code using the same
-          Tcl interpreter as connection.
-
-2002-06-02 Vlad Seryakov vlad@crystalballinc.com
-
-	* Small bugfixes with atclose handler, rewritten headers command
-
-2002-01-02 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixed bug in garbage collection, other small bugfixes
-
-2002-01-01 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixed bug encode/decode using ByteArray instead of string
-
-2001-12-30 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixed bug with wrong message id
-
-2001-12-26 Vlad Seryakov vlad@crystalballinc.com
-
-	* Many bugfixes and added strip command and
-          -array support for struct commands
-
-2001-12-24 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixed bug in session allocation/deallocation
-
-2001-12-21 Vlad Seryakov vlad@crystalballinc.com
-
-	* Fixed error handling and session expiration
-	* added parsedate, getparam, setparam commands
-
+A	ChangeLog
+A	LICENSE
+A	Makefile
+A	README
+A	nsimap.c
+A	test.tcl
